@@ -91,6 +91,8 @@
 // /,,****,**,****,*,,,,,*#%&%###%%%####%%%%###%%%####%%%%%%##%%&%#(###############(///*/(#############(/#%&%%%%%%%%%%%%%#%%&&%%%##%%%#######((((*,,,,*,,*,,,,,,***,****/(((#
 // /,,****,**,****,*,,,,,*#%&%###%%%####%%%%###%%%####%%%%%%##%%&%#(###############(///*/(#############(/#%&%%%%%%%%%%%%%#%%&&%%%##%%%#######((((*,,,,*,,*,,,,,,***,****/(((#
 
+#pragma once
+
 #include <bits/stdc++.h>
 
 using namespace std;
@@ -114,7 +116,7 @@ vector<vector<pair<int, int>>> orders, aisles;
 
 class Solution {
     public:
-        vector<int> mOrders = {}, mAisles = {};
+        vector<int> mOrders, mAisles;
         
         double calcObj() {
             if(mAisles.size() == 0) return 0.0;
@@ -123,12 +125,12 @@ class Solution {
 
         void print(){
             cout << mAisles.size() << endl;
-            for(int j = 0; j < mAisles.size(); j++){
+            for(size_t j = 0; j < mAisles.size(); j++){
                 cout << mAisles[j] << endl;
             }
 
             cout << mOrders.size() << endl;
-            for(int j = 0; j < mOrders.size(); j++){
+            for(size_t j = 0; j < mOrders.size(); j++){
                 cout << mOrders[j] << endl;
             }
         }

@@ -1,5 +1,32 @@
 #include "include/common.hpp"
 
+/**
+ * @brief Calcula o total de unidades em uma solução.
+ */
+int getTotalUnits(const Solution& s) {
+    int totalUnits = 0;
+    for (int orderIdx : s.mOrders) {
+        for (const auto& item_quant : orders[orderIdx]) {
+            totalUnits += item_quant.ss;
+        }
+    }
+    return totalUnits;
+}
+
+/**
+ * @brief Calcula o score (Unidades / Corredores).
+ */
+double calculateScore(const Solution& s) {
+    int totalUnits = getTotalUnits(s);
+    
+    if (s.mAisles.empty()) return 0.0;
+    
+    return (double)totalUnits / s.mAisles.size();
+}
+
+
+// --- FUNÇÕES DO GRASP ATUALIZADAS ---
+
 void construction(Solution& temp){
     
     const double alpha = 0.3;
@@ -14,32 +41,41 @@ void construction(Solution& temp){
         }
     }
 
+    // MUDANÇA: Rastreia o total de unidades para checar 'ub'
+    int currentTotalUnits = 0;
+
     while(!candidates.empty()){
 
-        vector<pair<int, int>> costList;
+        // MUDANÇA: 'costList' agora usa 'double' para o custo
+        vector<pair<double, int>> costList; // {cost, orderIndex}
         vector<int> invalidCandidates;
 
-        int bestCost = -INF, worstCost = INF;
+        // MUDANÇA: best/worst cost agora são 'double'
+        double bestCost = -1e18, worstCost = 1e18;
 
         set<int> currentAisles;
         for(auto const & idx : temp.mAisles) {
             currentAisles.insert(idx);
         }
 
-        for (int c = 0; c < candidates.size(); c++) {
+        // Corrigido Warning: usar size_t
+        for (size_t c = 0; c < candidates.size(); c++) {
             int orderIndex = candidates[c];
             const auto& order = orders[orderIndex];
 
-            if (temp.mOrders.size() + 1 > ub){ 
+            // MUDANÇA: Checa 'ub' com base em UNIDADES
+            int unitsInCandidate = 0;
+            for (const auto& iten : order) {
+                unitsInCandidate += iten.ss;
+            }
+            if (currentTotalUnits + unitsInCandidate > ub){ 
                 invalidCandidates.pb(c);
                 continue;
             }
 
-            // 3.2. Verificar Viabilidade (Disponibilidade)
-            // Precisamos verificar se o estoque *total restante* (em todos os corredores)
-            // é suficiente para este pedido.
+            // 3.2. Verificar Viabilidade (Disponibilidade de Estoque)
             bool feasible = true;
-            map<int, int> itemsNeeded; // Agrega itens do pedido
+            map<int, int> itemsNeeded;
             for (const auto& iten : order) {
                 itemsNeeded[iten.ff] += iten.ss;
             }
@@ -59,58 +95,71 @@ void construction(Solution& temp){
             }
 
             if (!feasible) {
-                invalidCandidates.pb(i);
+                invalidCandidates.pb(c); // <-- CORREÇÃO DE BUG (era 'i')
                 continue;
             }
             
-            // 3.3. Calcular Custo Guloso
-            // 'Custo(p) <- AvaliarCustoGuloso(Solucao U {p})'
-            // Custo = - (número de *novos* corredores necessários)
-            // (Queremos maximizar o custo, ou seja, minimizar novos corredores)
+            // 3.3. Calcular Custo Guloso (MUDANÇA NA MÉTRICA)
+            // Custo = Unidades / (1 + Novos Corredores)
             set<int> newAislesNeeded;
             for (const auto& item_quant : order) {
                 int item = item_quant.ff;
-                // Procura o item nos corredores
                 for (int j = 0; j < a; j++) {
                     if (remainingStock[j].count(item) && remainingStock[j][item] > 0) {
-                        // Se o corredor 'j' tem o item e não está na solução...
                         if (currentAisles.find(j) == currentAisles.end()) {
-                            newAislesNeeded.insert(j); // É um *novo* corredor
+                            newAislesNeeded.insert(j);
                         }
                     }
                 }
             }
             
-            int cost = - (int)newAislesNeeded.size();
+            // MUDANÇA: Nova métrica de custo
+            double cost = (double)unitsInCandidate / (1.0 + newAislesNeeded.size());
             costList.push_back({cost, orderIndex});
             bestCost = max(bestCost, cost);
             worstCost = min(worstCost, cost);
         }
 
         // 3.4. Remover candidatos inválidos
-        // (Itera de trás para frente para não invalidar os índices)
         sort(invalidCandidates.rbegin(), invalidCandidates.rend());
         for (int pos : invalidCandidates) {
-            candidates.erase(candidates.begin() + pos);
-        }
-
-        if (candidates.empty() || costList.empty()) {
-            break; // Nenhum candidato viável restante
-        }
-
-        // 4. Construir RCL
-        // 'LimiteRCL <- MelhorCusto - alpha * (MelhorCusto - PiorCusto)'
-        double RCL = bestCost - alpha * (bestCost - worstCost);
-        
-        vector<int> rcl;
-        for (const auto& cost_order : costList) {
-            if (cost_order.ff >= RCL) {
-                rcl.push_back(cost_order.ss); // Adiciona indice do pedido
+            if (pos < (int)candidates.size()) { // Checagem de segurança
+                candidates.erase(candidates.begin() + pos);
             }
         }
 
-        // Nenhum candidato passou no filtro (pode acontecer se houver 1 só)
-        if (rcl.empty()) break;
+        if (candidates.empty() || costList.empty()) {
+            break; 
+        }
+
+        // 4. Construir RCL
+        double limiteRCL = bestCost - alpha * (bestCost - worstCost);
+        
+        vector<int> rcl;
+        for (const auto& cost_order : costList) {
+            // cost_order.ff é 'double' (custo)
+            if (cost_order.ff >= limiteRCL) {
+                rcl.push_back(cost_order.ss); // Adiciona orderIndex
+            }
+        }
+ 
+        if (rcl.empty()) {
+            // Fallback: se o alfa filtrou tudo, pega o melhor
+            if (!costList.empty()) {
+                // Encontra o melhor da costList
+                double max_cost = -1e18;
+                int best_order = -1;
+                for(auto& p : costList) {
+                    if(p.ff > max_cost) {
+                        max_cost = p.ff;
+                        best_order = p.ss;
+                    }
+                }
+                if(best_order != -1) rcl.push_back(best_order);
+            }
+        }
+
+        if (rcl.empty()) break; // Nenhum candidato viável
         
         // 5. Selecionar Aleatoriamente e Adicionar à Solução
         int rclIndex = rand() % rcl.size();
@@ -118,13 +167,13 @@ void construction(Solution& temp){
         
         temp.mOrders.push_back(chosenOrderIndex);
         
-        // 6. Atualizar Estado (Estoque e Corredores Visitados)
-        // Esta é a parte de "coleta" (picking).
-        // Estratégia: Tentar pegar itens de corredores *já visitados* primeiro.
+        // 6. Atualizar Estado (Estoque e Corredores)
         const auto& chosenOrder = orders[chosenOrderIndex];
+        int unitsAdded = 0; // MUDANÇA: Rastreia unidades adicionadas
         for (const auto& item_quant : chosenOrder) {
             int item = item_quant.ff;
             int quantNeeded = item_quant.ss;
+            unitsAdded += quantNeeded; // MUDANÇA
             
             // 6.1. Tenta pegar de corredores *atuais*
             for (int aisleIdx : temp.mAisles) {
@@ -140,41 +189,173 @@ void construction(Solution& temp){
             if (quantNeeded > 0) {
                 for (int j = 0; j < a; j++) {
                     if (quantNeeded == 0) break;
-                    // Se 'j' NÃO é um corredor atual
                     if (currentAisles.find(j) == currentAisles.end()) {
                         if (remainingStock[j].count(item) && remainingStock[j][item] > 0) {
                             int take = min(quantNeeded, remainingStock[j][item]);
                             remainingStock[j][item] -= take;
                             quantNeeded -= take;
-                            
-                            // Adiciona este *novo* corredor à solução
                             temp.mAisles.push_back(j);
-                            currentAisles.insert(j); // Marca como visitado para este loop
+                            currentAisles.insert(j);
                         }
                     }
                 }
             }
         } 
+        currentTotalUnits += unitsAdded; // MUDANÇA: Atualiza total de unidades
 
         // 7. Remover PedidoEscolhido dos Candidatos
-        for (int c = 0; c < candidates.size(); c++) {
+        for (size_t c = 0; c < candidates.size(); c++) {
             if (candidates[c] == chosenOrderIndex) {
                 candidates.erase(candidates.begin() + c);
                 break;
             }
         }
     }
+}
 
+bool recomputeSolution(Solution& s) {
+    s.mAisles.clear();
+    
+    // Solução vazia é viável por definição (se lb <= 0)
+    if (s.mOrders.empty()) return (lb <= 0);
+
+    // MUDANÇA: Verifica 'lb' e 'ub' com base em UNIDADES
+    int totalUnits = getTotalUnits(s);
+    if (totalUnits < lb || totalUnits > ub) {
+        return false;
+    }
+
+    // 2. Cria um estoque 'local' para esta simulação
+    vector<map<int, int>> localStock(a);
+    for (int j = 0; j < a; j++) {
+        for (const auto& item_quant : aisles[j]) {
+            localStock[j][item_quant.ff] += item_quant.ss;
+        }
+    }
+    
+    // 3. Agrega *todos* os itens necessários
+    map<int, int> totalNeeded;
+    for(int orderIdx : s.mOrders) {
+        for(const auto& item_quant : orders[orderIdx]) {
+            totalNeeded[item_quant.ff] += item_quant.ss;
+        }
+    }
+
+    set<int> visitedAisles;
+    
+    // 4. Tenta 'pegar' os itens
+    for(auto const& [item, quant_needed] : totalNeeded) {
+        int quantNeeded = quant_needed;
+        for(int j = 0; j < a; j++) {
+            if (quantNeeded == 0) break;
+            if (localStock[j].count(item) && localStock[j][item] > 0) {
+                int take = min(quantNeeded, localStock[j][item]);
+                localStock[j][item] -= take;
+                quantNeeded -= take;
+                visitedAisles.insert(j);
+            }
+        }
+        
+        // 5. Se, após checar todos os corredores, ainda faltar...
+        if (quantNeeded > 0) {
+            return false; // ...a solução é inviável (falta de estoque)
+        }
+    }
+    
+    // 6. Se chegou aqui, é viável. Popula a lista de corredores.
+    s.mAisles.assign(visitedAisles.begin(), visitedAisles.end());
+    return true;
+}
+
+void refine(Solution& temp){
+    
+    bool improved = true;
+    
+    while (improved) {
+        improved = false;
+        // MUDANÇA: Usa a nova função de pontuação
+        double currentObj = calculateScore(temp);
+        
+        set<int> ordersIn(temp.mOrders.begin(), temp.mOrders.end());
+        vector<int> ordersOut;
+        for(int j = 0; j < o; j++) {
+            if(ordersIn.find(j) == ordersIn.end()) {
+                ordersOut.push_back(j);
+            }
+        }
+
+        // --- Movimento 1: "Add" (Adicionar 1 pedido) ---
+        // MUDANÇA: Removemos o 'if (temp.mOrders.size() < ub)'
+        // 'recomputeSolution' vai checar o 'ub' de unidades
+        for (int orderToAddIdx : ordersOut) {
+            Solution neighbor = temp;
+            neighbor.mOrders.push_back(orderToAddIdx);
+            
+            if(recomputeSolution(neighbor)) {
+                // MUDANÇA: Usa a nova função de pontuação
+                double neighborObj = calculateScore(neighbor);
+                if(neighborObj > (currentObj + 1e-9)) {
+                    temp = neighbor;
+                    improved = true;
+                    break; 
+                }
+            }
+        }
+        if(improved) continue; 
+
+        // --- Movimento 2: "Remove" (Remover 1 pedido) ---
+        // MUDANÇA: Removemos o 'if (temp.mOrders.size() > lb)'
+        // 'recomputeSolution' vai checar o 'lb' de unidades
+        for (size_t i = 0; i < temp.mOrders.size(); i++) {
+            Solution neighbor;
+            neighbor.mOrders = temp.mOrders;
+            neighbor.mOrders.erase(neighbor.mOrders.begin() + i);
+            
+            if(recomputeSolution(neighbor)) {
+                // MUDANÇA: Usa a nova função de pontuação
+                double neighborObj = calculateScore(neighbor);
+                if(neighborObj > (currentObj + 1e-9)) {
+                    temp = neighbor;
+                    improved = true;
+                    break;
+                }
+            }
+        }
+        if(improved) continue;
+
+        // --- Movimento 3: "Swap" (Trocar 1-1) ---
+        vector<int> currentOrders = temp.mOrders; 
+        for (size_t i = 0; i < currentOrders.size(); i++) {
+            int orderToRemoveIdx = currentOrders[i];
+            
+            for (int orderToAddIdx : ordersOut) {
+                if(orderToRemoveIdx == orderToAddIdx) continue;
+                
+                Solution neighbor;
+                neighbor.mOrders = currentOrders;
+                neighbor.mOrders[i] = orderToAddIdx; 
+
+                if (recomputeSolution(neighbor)) {
+                    // MUDANÇA: Usa a nova função de pontuação
+                    double neighborObj = calculateScore(neighbor);
+                    if (neighborObj > (currentObj + 1e-9)) { 
+                        temp = neighbor;
+                        improved = true; 
+                        break;
+                    }
+                }
+            }
+            if(improved) break; 
+        }
+    } // fim while(improved)
 }
 
 int main(){ _
 
     srand(time(NULL));
-
     cin >> o >> i >> a;
 
-    orders.resize(o);
-    aisles.resize(a);
+    orders.resize(o); aisles.resize(a);
 
     for(int j = 0; j < o; j++){
         int k; cin >> k;
@@ -194,19 +375,22 @@ int main(){ _
 
     cin >> lb >> ub;
 
-    Solution sol;
+    Solution sol; // Solução inicial (vazia, score 0)
 
     auto start_time = chrono::high_resolution_clock::now();
-    auto end_time = start_time + chrono::seconds(1200);
+    auto end_time = start_time + chrono::seconds(10); // 10 segundos
+
+    double bestScore = 0.0; // Rastreia o melhor score
 
     while (chrono::high_resolution_clock::now() < end_time) {
         
-        Solution temp; construction(temp);
-
+        Solution temp; 
+        construction(temp);  refine(temp);
         
-
-        if (temp.mOrders.size() >= lb) {
-            if (temp.calcObj() > sol.calcObj()) sol = temp;    
+        double tempScore = calculateScore(temp);
+        if (tempScore > bestScore) {
+            bestScore = tempScore;
+            sol = temp;    
         }
     }
 
