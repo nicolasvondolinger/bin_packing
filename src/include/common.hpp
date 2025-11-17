@@ -117,11 +117,6 @@ vector<vector<pair<int, int>>> orders, aisles;
 class Solution {
     public:
         vector<int> mOrders, mAisles;
-        
-        double calcObj() {
-            if(mAisles.size() == 0) return 0.0;
-            return (static_cast<double>(mOrders.size()) / mAisles.size());
-        }
 
         void print(){
             cout << mAisles.size() << endl;

@@ -1,8 +1,5 @@
 #include "include/common.hpp"
 
-/**
- * @brief Calcula o total de unidades em uma solução.
- */
 int getTotalUnits(const Solution& s) {
     int totalUnits = 0;
     for (int orderIdx : s.mOrders) {
@@ -13,9 +10,6 @@ int getTotalUnits(const Solution& s) {
     return totalUnits;
 }
 
-/**
- * @brief Calcula o score (Unidades / Corredores).
- */
 double calculateScore(const Solution& s) {
     int totalUnits = getTotalUnits(s);
     
@@ -23,9 +17,6 @@ double calculateScore(const Solution& s) {
     
     return (double)totalUnits / s.mAisles.size();
 }
-
-
-// --- FUNÇÕES DO GRASP ATUALIZADAS ---
 
 void construction(Solution& temp){
     
@@ -36,48 +27,41 @@ void construction(Solution& temp){
 
     vector<map<int, int>> remainingStock(a);
     for (int j = 0; j < a; j++) {
-        for (const auto& item_quant : aisles[j]) { 
-            remainingStock[j][item_quant.ff] += item_quant.ss;
+        for (const auto& item : aisles[j]) { 
+            remainingStock[j][item.ff] += item.ss;
         }
     }
 
-    // MUDANÇA: Rastreia o total de unidades para checar 'ub'
     int currentTotalUnits = 0;
 
     while(!candidates.empty()){
-
-        // MUDANÇA: 'costList' agora usa 'double' para o custo
-        vector<pair<double, int>> costList; // {cost, orderIndex}
+        vector<pair<double, int>> costList;
         vector<int> invalidCandidates;
 
-        // MUDANÇA: best/worst cost agora são 'double'
         double bestCost = -1e18, worstCost = 1e18;
 
         set<int> currentAisles;
-        for(auto const & idx : temp.mAisles) {
-            currentAisles.insert(idx);
-        }
+        for(auto const & idx : temp.mAisles) currentAisles.insert(idx);
 
-        // Corrigido Warning: usar size_t
         for (size_t c = 0; c < candidates.size(); c++) {
             int orderIndex = candidates[c];
             const auto& order = orders[orderIndex];
 
-            // MUDANÇA: Checa 'ub' com base em UNIDADES
+            // Checa se esse pedido + atuais está abaixo de UB
+            // Ao mesmo tempo, prepara estrutura que vai chegar a disponibilidade de estoque
+
             int unitsInCandidate = 0;
-            for (const auto& iten : order) {
-                unitsInCandidate += iten.ss;
+            bool feasible = true;
+            map<int, int> itemsNeeded;
+
+            for (const auto& item : order) {
+                unitsInCandidate += item.ss;
+                itemsNeeded[item.ff] += item.ss;
             }
+
             if (currentTotalUnits + unitsInCandidate > ub){ 
                 invalidCandidates.pb(c);
                 continue;
-            }
-
-            // 3.2. Verificar Viabilidade (Disponibilidade de Estoque)
-            bool feasible = true;
-            map<int, int> itemsNeeded;
-            for (const auto& iten : order) {
-                itemsNeeded[iten.ff] += iten.ss;
             }
             
             for (const auto& needed : itemsNeeded) {
@@ -95,11 +79,11 @@ void construction(Solution& temp){
             }
 
             if (!feasible) {
-                invalidCandidates.pb(c); // <-- CORREÇÃO DE BUG (era 'i')
+                invalidCandidates.pb(c);
                 continue;
             }
             
-            // 3.3. Calcular Custo Guloso (MUDANÇA NA MÉTRICA)
+            // Calcula Custo Guloso 
             // Custo = Unidades / (1 + Novos Corredores)
             set<int> newAislesNeeded;
             for (const auto& item_quant : order) {
@@ -113,26 +97,23 @@ void construction(Solution& temp){
                 }
             }
             
-            // MUDANÇA: Nova métrica de custo
             double cost = (double)unitsInCandidate / (1.0 + newAislesNeeded.size());
             costList.push_back({cost, orderIndex});
             bestCost = max(bestCost, cost);
             worstCost = min(worstCost, cost);
         }
 
-        // 3.4. Remover candidatos inválidos
+        // Remove candidatos inválidos
         sort(invalidCandidates.rbegin(), invalidCandidates.rend());
         for (int pos : invalidCandidates) {
-            if (pos < (int)candidates.size()) { // Checagem de segurança
+            if (pos < (int)candidates.size()) { 
                 candidates.erase(candidates.begin() + pos);
             }
         }
 
-        if (candidates.empty() || costList.empty()) {
-            break; 
-        }
+        if (candidates.empty() || costList.empty()) break; 
 
-        // 4. Construir RCL
+        // Construir RCL
         double limiteRCL = bestCost - alpha * (bestCost - worstCost);
         
         vector<int> rcl;
@@ -161,21 +142,20 @@ void construction(Solution& temp){
 
         if (rcl.empty()) break; // Nenhum candidato viável
         
-        // 5. Selecionar Aleatoriamente e Adicionar à Solução
+        // Seleciona Aleatoriamente e Adiciona à Solução
         int rclIndex = rand() % rcl.size();
         int chosenOrderIndex = rcl[rclIndex];
-        
         temp.mOrders.push_back(chosenOrderIndex);
         
-        // 6. Atualizar Estado (Estoque e Corredores)
+        // Atualiza Estado (Estoque e Corredores)
         const auto& chosenOrder = orders[chosenOrderIndex];
-        int unitsAdded = 0; // MUDANÇA: Rastreia unidades adicionadas
+        int unitsAdded = 0; // Rastreia unidades adicionadas
         for (const auto& item_quant : chosenOrder) {
             int item = item_quant.ff;
             int quantNeeded = item_quant.ss;
-            unitsAdded += quantNeeded; // MUDANÇA
+            unitsAdded += quantNeeded;
             
-            // 6.1. Tenta pegar de corredores *atuais*
+            // Tenta pegar de corredores atuais
             for (int aisleIdx : temp.mAisles) {
                 if (quantNeeded == 0) break;
                 if (remainingStock[aisleIdx].count(item)) {
@@ -185,7 +165,7 @@ void construction(Solution& temp){
                 }
             }
             
-            // 6.2. Se ainda precisar, pega de *novos* corredores
+            // Se ainda precisar, pega de novos corredores
             if (quantNeeded > 0) {
                 for (int j = 0; j < a; j++) {
                     if (quantNeeded == 0) break;
@@ -201,9 +181,10 @@ void construction(Solution& temp){
                 }
             }
         } 
-        currentTotalUnits += unitsAdded; // MUDANÇA: Atualiza total de unidades
 
-        // 7. Remover PedidoEscolhido dos Candidatos
+        currentTotalUnits += unitsAdded; // Atualiza total de unidades
+
+        // Remover PedidoEscolhido dos Candidatos
         for (size_t c = 0; c < candidates.size(); c++) {
             if (candidates[c] == chosenOrderIndex) {
                 candidates.erase(candidates.begin() + c);
@@ -273,7 +254,6 @@ void refine(Solution& temp){
     
     while (improved) {
         improved = false;
-        // MUDANÇA: Usa a nova função de pontuação
         double currentObj = calculateScore(temp);
         
         set<int> ordersIn(temp.mOrders.begin(), temp.mOrders.end());
@@ -285,7 +265,6 @@ void refine(Solution& temp){
         }
 
         // --- Movimento 1: "Add" (Adicionar 1 pedido) ---
-        // MUDANÇA: Removemos o 'if (temp.mOrders.size() < ub)'
         // 'recomputeSolution' vai checar o 'ub' de unidades
         for (int orderToAddIdx : ordersOut) {
             Solution neighbor = temp;
@@ -312,7 +291,6 @@ void refine(Solution& temp){
             neighbor.mOrders.erase(neighbor.mOrders.begin() + i);
             
             if(recomputeSolution(neighbor)) {
-                // MUDANÇA: Usa a nova função de pontuação
                 double neighborObj = calculateScore(neighbor);
                 if(neighborObj > (currentObj + 1e-9)) {
                     temp = neighbor;
@@ -336,7 +314,6 @@ void refine(Solution& temp){
                 neighbor.mOrders[i] = orderToAddIdx; 
 
                 if (recomputeSolution(neighbor)) {
-                    // MUDANÇA: Usa a nova função de pontuação
                     double neighborObj = calculateScore(neighbor);
                     if (neighborObj > (currentObj + 1e-9)) { 
                         temp = neighbor;
@@ -347,7 +324,7 @@ void refine(Solution& temp){
             }
             if(improved) break; 
         }
-    } // fim while(improved)
+    } 
 }
 
 int main(){ _
@@ -375,17 +352,17 @@ int main(){ _
 
     cin >> lb >> ub;
 
-    Solution sol; // Solução inicial (vazia, score 0)
+    Solution sol; 
 
     auto start_time = chrono::high_resolution_clock::now();
-    auto end_time = start_time + chrono::seconds(10); // 10 segundos
+    auto end_time = start_time + chrono::seconds(10);
 
-    double bestScore = 0.0; // Rastreia o melhor score
+    double bestScore = 0.0;
 
     while (chrono::high_resolution_clock::now() < end_time) {
         
         Solution temp; 
-        construction(temp);  refine(temp);
+        construction(temp); refine(temp);
         
         double tempScore = calculateScore(temp);
         if (tempScore > bestScore) {
