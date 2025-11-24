@@ -67,18 +67,14 @@ class WaveOrderPicking:
             if not lines: # Arquivo vazio
                 return [], []
 
-            num_aisles = int(lines[0])
-            visited_aisles = [int(lines[i + 1]) for i in range(num_aisles)]
+            num_orders = int(lines[0])
+            selected_orders = [int(lines[i + 1]) for i in range(num_orders)]
             
-            num_orders = int(lines[num_aisles + 1])
-            selected_orders = [int(lines[num_aisles + 2 + i]) for i in range(num_orders)]
-
-        # Seu C++ usa o formato: A-list, O-list
-        # O checker.py original usava: O-list, A-list
-        # Ajustei o read_output para o formato do seu C++
+            num_aisles = int(lines[num_orders + 1])
+            visited_aisles = [int(lines[num_orders + 2 + i]) for i in range(num_aisles)]
         
-        selected_orders = list(set(selected_orders))
         visited_aisles = list(set(visited_aisles))
+        selected_orders = list(set(selected_orders))
         return selected_orders, visited_aisles
 
     def is_solution_feasible(self, selected_orders, visited_aisles):
@@ -206,7 +202,7 @@ def run_set(set_name):
         # 2. Roda o solver C++
         try:
             with open(input_file, 'r') as f_in, open(output_file, 'w') as f_out:
-                cmd = [EXECUTABLE_PATH]
+                cmd = [EXECUTABLE_PATH, '2']
                 
                 result = subprocess.run(
                     cmd,
@@ -270,6 +266,7 @@ def plot_results(set_name, instance_names, my_scores, best_scores):
 
     output_folder = os.path.join(ROOT_DIR, "results", set_name)
     plot_file = os.path.join(output_folder, f"comparativo_{set_name}.png")
+    plot_file_log = os.path.join(output_folder, f"comparativo_{set_name}_log.png")
 
     x = np.arange(len(instance_names))
     width = 0.35 
@@ -279,7 +276,7 @@ def plot_results(set_name, instance_names, my_scores, best_scores):
     rects1 = ax.bar(x - width/2, my_scores, width, label='Sua Solução (Solver)', color='tab:blue')
     rects2 = ax.bar(x + width/2, best_scores, width, label='Melhor Solução (Gabarito)', color='tab:orange')
 
-    ax.set_ylabel('Score (Unidades / Corredores)') # <-- Métrica atualizada
+    ax.set_ylabel('Score (Unidades / Corredores)')
     ax.set_title(f'Comparativo de Scores - Set {set_name}')
     ax.set_xticks(x)
     ax.set_xticklabels(instance_names, rotation=45, ha="right")
@@ -291,6 +288,10 @@ def plot_results(set_name, instance_names, my_scores, best_scores):
 
     fig.tight_layout()
     plt.savefig(plot_file)
+
+    ax.set_yscale('log')
+    plt.savefig(plot_file_log)
+
     plt.close(fig)
     
     print(f"Gráfico salvo em: {plot_file}")
