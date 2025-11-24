@@ -202,7 +202,7 @@ def run_set(set_name):
         # 2. Roda o solver C++
         try:
             with open(input_file, 'r') as f_in, open(output_file, 'w') as f_out:
-                cmd = [EXECUTABLE_PATH, '2']
+                cmd = [EXECUTABLE_PATH, '3']
                 
                 result = subprocess.run(
                     cmd,

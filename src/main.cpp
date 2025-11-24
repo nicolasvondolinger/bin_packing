@@ -3,6 +3,7 @@
 #include "include/heuristic1.cpp"
 #include "include/heuristic2.cpp"
 #include "include/heuristic3.cpp"
+#include "include/heuristic4.cpp"
 
 #include <functional>
 #include <mutex>
@@ -43,12 +44,19 @@ int main(int argc, char *argv[]) { _
                 HeurCached::refinement(p, c, s);
             };
             break;
+        case 3:
+            heuristic = [&p, &c](Solution &s)
+            {
+                Heur4::construction(p, c, s);
+                HeurCached::refinement(p, c, s);
+            };
+            break;
     }
 
     size_t threadCount = std::thread::hardware_concurrency();
     
     auto lastImprovement = chrono::high_resolution_clock::now();
-    auto patience = chrono::seconds(60);
+    auto patience = chrono::seconds(3);
 
     std::cerr << "Running threads" << std::endl;
     std::vector<std::thread> threads;
@@ -68,7 +76,10 @@ int main(int argc, char *argv[]) { _
                 bool feasible = solution.checkFeasibility(p);
 
                 if(!feasible) {
-                    std::cerr << "Produced unfeasible solution!" << std::endl;
+                    std::cerr << "Produced unfeasible solution! "
+                        << solution.mOrders.size() << " orders, "
+                        << solution.mAisles.size() << " aisles, "
+                        << solution.getTotalUnits(p) << " units" << std::endl;
                     continue;
                 }
                 

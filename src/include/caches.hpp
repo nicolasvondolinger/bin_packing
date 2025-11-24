@@ -311,4 +311,44 @@ struct State {
         }
         return addedCount;
     }
+
+    int estimateNewItemsForAisle(int aisleIdx) {
+        int estimatedNewItems = 0;
+        for(const auto &line : p.aisles[aisleIdx]) {
+            int item = line.ff;
+            int qty = line.ss;
+
+            for(const auto &line2 : c.itemToOrders[item]) {
+                int orderQty = line.ff;
+                int orderIdx = line2.ss;
+
+                if (currentTotalUnits + estimatedNewItems + c.orderTotalUnits[orderIdx] > p.ub) {
+                    continue;
+                }
+
+                if(itemBalance[item] + qty >= orderQty) {
+                    estimatedNewItems += orderQty;
+                    qty -= orderQty;
+                }
+            }
+        }
+        return estimatedNewItems;
+    }
+
+    void addAisleWithOrders(int aisleIdx, vector<int> &aisleSolution, vector<int> &orderSolution) {
+        addAisle(aisleIdx);
+        aisleSolution.push_back(aisleIdx);
+
+        for(const auto &line : p.aisles[aisleIdx]) {
+            int item = line.ff;
+            for(const auto &line2 : c.itemToOrders[item]) {
+                int orderIdx = line2.ss;
+                if (orderSelected[orderIdx]) continue;
+                if (canFitOrder(orderIdx)) {
+                    addOrder(orderIdx);
+                    orderSolution.push_back(orderIdx);
+                }
+            }
+        }
+    }
 };

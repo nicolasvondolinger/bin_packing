@@ -187,21 +187,17 @@ namespace HeurCached {
             }
             if (improved) continue;
 
-            // Drop an aisle
-            if(!temp.mAisles.empty()) {
-                auto oldOrders = temp.mOrders;
-                size_t isleIdx = uniform_int_distribution<>(0, temp.mAisles.size() - 1)(rng);
-                state.removeAisle(isleIdx);
-                state.pruneOrders(temp.mOrders);
-                double newScore = (double)state.currentTotalUnits / (double)temp.mAisles.size();
+            // Add an aisle
+            size_t aisleIdx = uniform_int_distribution<>(0, p.aisles.size() - 1)(rng);
+            if(!state.aisleSelected[aisleIdx]) {
+                int estimatedNewItems = state.estimateNewItemsForAisle(aisleIdx);
+                double newScore = (double)(state.currentTotalUnits + estimatedNewItems) / (temp.mAisles.size() + 1);
                 if(newScore > currentScore) {
+                    state.addAisleWithOrders(aisleIdx, temp.mAisles, temp.mOrders);
                     improved = true;
-                } else {
-                    state.addAisle(isleIdx);
-                    temp.mOrders = oldOrders;
-                    for(auto i: oldOrders) state.addOrder(i);
                 }
             }
+            if (improved) continue;
         }
     }
 }

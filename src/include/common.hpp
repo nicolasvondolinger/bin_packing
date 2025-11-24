@@ -120,6 +120,7 @@ const int INF = 0x3f3f3f3f;
 const ll LINF = 0x3f3f3f3f3f3f3f3fll;
 
 struct Problem {
+    // A vector of (item, quantity) pairs for each order / aisle.
     vector<vector<pair<int, int>>> orders, aisles;
     ll itemCount, lb, ub;
 
@@ -147,6 +148,12 @@ struct Problem {
                 aisles[j].pb({iten, quant});
             }
         }
+
+        for(auto &aisle: aisles)
+            std::sort(aisle.begin(), aisle.end(), [](auto &a, auto &b) { return a.ss > b.ss; });
+
+        for(auto &order: orders)
+            std::sort(order.begin(), order.end(), [](auto &a, auto &b) { return a.ss > b.ss; });
 
         input >> lb >> ub;
     }
