@@ -166,18 +166,16 @@ struct Problem {
 };
 
 struct Solution {
-    vector<int> mOrders, mAisles;
+    std::unordered_set<int> mOrders, mAisles;
 
     void print(){
         cout << mOrders.size() << endl;
-        for(size_t j = 0; j < mOrders.size(); j++){
-            cout << mOrders[j] << endl;
-        }
+        for(int o: mOrders)
+            cout << o << endl;
 
         cout << mAisles.size() << endl;
-        for(size_t j = 0; j < mAisles.size(); j++){
-            cout << mAisles[j] << endl;
-        }
+        for(int a: mAisles)
+            cout << a << endl;
     }
     
     int getTotalUnits(const Problem &p) const {

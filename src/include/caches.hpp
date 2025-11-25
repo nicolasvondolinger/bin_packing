@@ -98,26 +98,43 @@ struct State {
     vector<bool> aisleSelected;
     vector<bool> orderSelected;
 
-    State(const Problem& prob, const Caches& caches) 
-        : p(prob), c(caches), currentTotalUnits(0) {
+    std::unordered_set<int> &aisleSolution;
+    std::unordered_set<int> &orderSolution;
+
+    State(const Problem &prob, const Caches &caches, Solution &sol)
+        : p(prob), c(caches), currentTotalUnits(0), aisleSolution(sol.mAisles), orderSolution(sol.mOrders)
+    {
         reset();
     }
 
     void reset() {
         currentTotalUnits = 0;
         deficitItems.clear();
+
         itemBalance.clear();
-        aisleSelected.clear();
-        orderSelected.clear();
         itemBalance.resize(p.itemCount + 1, 0);
+
+        aisleSelected.clear();
         aisleSelected.resize(p.aisles.size(), false);
+
+        orderSelected.clear();
         orderSelected.resize(p.orders.size(), false);
+
+        vector<int> buffer;
+        buffer.assign(aisleSolution.begin(), aisleSolution.end());
+        aisleSolution.clear();
+        for(auto a: buffer) addAisle(a);
+
+        buffer.assign(orderSolution.begin(), orderSolution.end());
+        orderSolution.clear();
+        for(auto o: buffer) addOrder(o);
     }
 
     // O(Number of items in the aisle)
     void addAisle(int aisleIdx) {
         if (aisleSelected[aisleIdx]) return;
         aisleSelected[aisleIdx] = true;
+        aisleSolution.insert(aisleIdx);
 
         for (const auto& line : p.aisles[aisleIdx]) {
             int item = line.ff;
@@ -139,6 +156,7 @@ struct State {
     void removeAisle(int aisleIdx) {
         if (!aisleSelected[aisleIdx]) return;
         aisleSelected[aisleIdx] = false;
+        aisleSolution.erase(aisleIdx);
 
         for (const auto& line : p.aisles[aisleIdx]) {
             int item = line.ff;
@@ -158,6 +176,7 @@ struct State {
     void addOrder(int orderIdx) {
         if (orderSelected[orderIdx]) return;
         orderSelected[orderIdx] = true;
+        orderSolution.insert(orderIdx);
         currentTotalUnits += c.orderTotalUnits[orderIdx];
 
         for (const auto& line : p.orders[orderIdx]) {
@@ -178,6 +197,7 @@ struct State {
     void removeOrder(int orderIdx) {
         if (!orderSelected[orderIdx]) return;
         orderSelected[orderIdx] = false;
+        orderSolution.erase(orderIdx);
         currentTotalUnits -= c.orderTotalUnits[orderIdx];
 
         for (const auto& line : p.orders[orderIdx]) {
@@ -201,6 +221,10 @@ struct State {
                currentTotalUnits <= p.ub;
     }
 
+    double calculateScore() const {
+        return (double)currentTotalUnits / aisleSelected.size();
+    }
+
     // Fast check if a specific order CAN fit into current aisle selection
     // without adding new aisles (Free Fill Heuristic)
     bool canFitOrder(int orderIdx) const {
@@ -219,9 +243,11 @@ struct State {
     }
 
     // Helper: Prune redundant aisles
-    void pruneAisles(vector<int>& aisleSolution) {
-        for(int i = 0; i < aisleSolution.size();) {
-            int aisleIdx = aisleSolution[i], canRemove = 1;
+    vector<int> pruneAislesToFitOrders() {
+        vector<int> mem, scanning;
+        scanning.assign(aisleSolution.begin(), aisleSolution.end());
+        for(int aisleIdx: scanning) {
+            int canRemove = 1;
             for (const auto& line : p.aisles[aisleIdx]) {
                 int item = line.ff;
                 int qty = line.ss;
@@ -231,27 +257,16 @@ struct State {
                 }
             }
             if (canRemove == 1) {
+                mem.push_back(aisleIdx);
                 removeAisle(aisleIdx);
-                std::swap(aisleSolution[i], aisleSolution.back());
-                aisleSolution.pop_back();
-            } else {
-                i += 1;
             }
         }
-    }
-
-    void pruneOrders(vector<int>& orderSolution) {
-        auto deficit = deficitItems;
-        for(auto i: deficit)
-            while(itemBalance[i] < 0)
-                for(auto order: c.itemToOrders[i])
-                    if(orderSelected[order.ss])
-                        removeOrder(order.ss);
+        return mem;
     }
 
     // Helper: Greedy Aisle Selection to satisfy deficits in State
     // Returns the number of new aisles added
-    int repairSolution(vector<int>& aisleSolution) {
+    int addAislesToRepairSolution() {
         int addedCount = 0;
 
         while (!deficitItems.empty()) {
@@ -303,7 +318,6 @@ struct State {
 
             if (bestAisle != -1) {
                 addAisle(bestAisle);
-                aisleSolution.push_back(bestAisle);
                 addedCount++;
             } else {
                 return -1; // Should not happen if global feasibility is checked
@@ -335,10 +349,8 @@ struct State {
         return estimatedNewItems;
     }
 
-    void addAisleWithOrders(int aisleIdx, vector<int> &aisleSolution, vector<int> &orderSolution) {
+    void addAisleWithOrdersGreedy(int aisleIdx) {
         addAisle(aisleIdx);
-        aisleSolution.push_back(aisleIdx);
-
         for(const auto &line : p.aisles[aisleIdx]) {
             int item = line.ff;
             for(const auto &line2 : c.itemToOrders[item]) {
@@ -346,7 +358,6 @@ struct State {
                 if (orderSelected[orderIdx]) continue;
                 if (canFitOrder(orderIdx)) {
                     addOrder(orderIdx);
-                    orderSolution.push_back(orderIdx);
                 }
             }
         }

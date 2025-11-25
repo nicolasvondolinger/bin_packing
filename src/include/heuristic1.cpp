@@ -1,5 +1,4 @@
 #include "./common.hpp"
-#include <random>
 
 namespace Heur1 {
     void construction(const Problem &p, Solution& temp) {
@@ -132,7 +131,7 @@ namespace Heur1 {
             // Seleciona Aleatoriamente e Adiciona à Solução
             int rclIndex = std::uniform_int_distribution<>(0, rcl.size() - 1)(rng);
             int chosenOrderIndex = rcl[rclIndex];
-            temp.mOrders.push_back(chosenOrderIndex);
+            temp.mOrders.insert(chosenOrderIndex);
             
             // Atualiza Estado (Estoque e Corredores)
             const auto& chosenOrder = p.orders[chosenOrderIndex];
@@ -161,7 +160,7 @@ namespace Heur1 {
                                 int take = min(quantNeeded, remainingStock[j][item]);
                                 remainingStock[j][item] -= take;
                                 quantNeeded -= take;
-                                temp.mAisles.push_back(j);
+                                temp.mAisles.insert(j);
                                 currentAisles.insert(j);
                             }
                         }
@@ -231,7 +230,8 @@ namespace Heur1 {
         }
         
         // 6. Se chegou aqui, é viável. Popula a lista de corredores.
-        s.mAisles.assign(visitedAisles.begin(), visitedAisles.end());
+        s.mAisles.clear();
+        s.mAisles.insert(visitedAisles.begin(),visitedAisles.end());
         return true;
     }
     
@@ -254,7 +254,7 @@ namespace Heur1 {
             // 'recomputeSolution' vai checar o 'ub' de unidades
             for (int orderToAddIdx : ordersOut) {
                 Solution neighbor = temp;
-                neighbor.mOrders.push_back(orderToAddIdx);
+                neighbor.mOrders.insert(orderToAddIdx);
                 
                 if(recomputeSolution(p, neighbor)) {
                     // MUDANÇA: Usa a nova função de pontuação
@@ -274,7 +274,9 @@ namespace Heur1 {
             for (size_t i = 0; i < temp.mOrders.size(); i++) {
                 Solution neighbor;
                 neighbor.mOrders = temp.mOrders;
-                neighbor.mOrders.erase(neighbor.mOrders.begin() + i);
+                auto it = neighbor.mOrders.begin();
+                std::advance(it, i);
+                neighbor.mOrders.erase(it);
                 
                 if(recomputeSolution(p, neighbor)) {
                     double neighborObj = neighbor.calculateScore(p);
@@ -288,16 +290,15 @@ namespace Heur1 {
             if(improved) continue;
     
             // --- Movimento 3: "Swap" (Trocar 1-1) ---
-            vector<int> currentOrders = temp.mOrders; 
-            for (size_t i = 0; i < currentOrders.size(); i++) {
-                int orderToRemoveIdx = currentOrders[i];
-                
+            auto currentOrders = temp.mOrders; 
+            for (int orderToRemoveIdx: currentOrders) {                
                 for (int orderToAddIdx : ordersOut) {
                     if(orderToRemoveIdx == orderToAddIdx) continue;
                     
                     Solution neighbor;
                     neighbor.mOrders = currentOrders;
-                    neighbor.mOrders[i] = orderToAddIdx; 
+                    neighbor.mOrders.erase(orderToRemoveIdx);
+                    neighbor.mOrders.insert(orderToAddIdx);
     
                     if (recomputeSolution(p, neighbor)) {
                         double neighborObj = neighbor.calculateScore(p);

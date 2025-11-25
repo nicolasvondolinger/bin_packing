@@ -33,22 +33,25 @@ int main(int argc, char *argv[]) { _
         case 1:
             heuristic = [&p, &c](Solution &s)
             {
-                HeurCached::construction(p, c, s);
-                HeurCached::refinement(p, c, s);
+                State state(p, c, s);
+                HeurCached::construction(p, c, state);
+                HeurCached::refinement(p, c, state);
             };
             break;
         case 2:
             heuristic = [&p, &c](Solution &s)
             {
-                Heur3::construction(p, c, s);
-                HeurCached::refinement(p, c, s);
+                State state(p, c, s);
+                Heur3::construction(p, c, state);
+                HeurCached::refinement(p, c, state);
             };
             break;
         case 3:
             heuristic = [&p, &c](Solution &s)
             {
-                Heur4::construction(p, c, s);
-                HeurCached::refinement(p, c, s);
+                State state(p, c, s);
+                Heur4::construction(p, c, state);
+                HeurCached::refinement(p, c, state);
             };
             break;
     }

@@ -1,28 +1,21 @@
 #include "common.hpp"
 #include "caches.hpp"
-#include <cstdlib>
 
 namespace Heur3 {
-    void construction(const Problem &p, const Caches &c, Solution& temp) {
+    void construction(const Problem &p, const Caches &c, State &state) {
         // 1. Setup State and RNG
         static thread_local std::mt19937 rng(std::random_device{}());
 
-        temp.mOrders.clear();
-        temp.mAisles.clear();
-
-        State state(p, c);
-        
         // Candidates pool management
         // We use a swapping technique to remove items in O(1) without 'erase()'
         vector<int> candidates(p.orders.size());
         iota(candidates.begin(), candidates.end(), 0);
-        int valid_count = candidates.size();
 
         const double alpha = 0.5;     
         const int SAMPLE_SIZE = 80; // Constant sample size = Linear Complexity
 
         // 2. Main Loop: Runs at most N times
-        while (valid_count > 0) {
+        while (!candidates.empty()) {
             
             // --- A. Sampling (Tournament) ---
             // We pick 'SAMPLE_SIZE' random indices from the *valid* range [0, valid_count-1]
@@ -30,11 +23,11 @@ namespace Heur3 {
             vector<pair<double, int>> sampleRCL; // {Score, Index_In_Candidates_Array}
             double minScore = 1e18, maxScore = -1e18;
             
-            int attempts = min(valid_count, SAMPLE_SIZE);
+            int attempts = min<int>(candidates.size(), SAMPLE_SIZE);
             
             for(int k = 0; k < attempts; ++k) {
                 // Pick random index from valid range
-                int randPos = std::uniform_int_distribution<>(0, valid_count - 1)(rng);
+                int randPos = std::uniform_int_distribution<>(0, candidates.size() - 1)(rng);
                 int orderIdx = candidates[randPos];
                 
                 // --- B. Fast Evaluation ---
@@ -64,7 +57,7 @@ namespace Heur3 {
                 }
 
                 double score = (log(state.currentTotalUnits + c.orderTotalUnits[orderIdx])
-                        - log(temp.mAisles.size() + estimatedNewAisles));
+                        - log(state.aisleSolution.size() + estimatedNewAisles));
                 
                 // Store {Score, Position_In_Array} so we can swap-pop later
                 sampleRCL.push_back({score, randPos});
@@ -94,7 +87,7 @@ namespace Heur3 {
                 // We must remove *one* of them to ensure progress (avoid infinite loop).
                 // We pick the first sampled one to discard.
                 if (!sampleRCL.empty()) chosenPos = sampleRCL[0].second;
-                else chosenPos = std::uniform_int_distribution<>(0, valid_count - 1)(rng);
+                else chosenPos = std::uniform_int_distribution<>(0, candidates.size() - 1)(rng);
                 tryToAdd = false; // Just discard, don't try to add
             } else {
                 // Pick one from RCL
@@ -113,9 +106,8 @@ namespace Heur3 {
                 
                 // 2. Exact Repair (The slow but safe check)
                 // If this fails, we MUST rollback to stay feasible.
-                if (state.repairSolution(temp.mAisles) != -1) {
+                if (state.addAislesToRepairSolution() != -1) {
                     // Success! Keep it.
-                    temp.mOrders.push_back(orderIdx);
                 } else {
                     // Failure! Rollback.
                     state.removeOrder(orderIdx);
@@ -124,18 +116,18 @@ namespace Heur3 {
                 }
             }
 
-            // --- E. Swap-and-Pop (O(1) Removal) ---
+            // --- E. Removal ---
             // Whether we successfully added it, failed to repair it, or it hit UB,
             // we are done with this candidate for this construction run.
             
             // Swap chosen element with the last valid element
-            std::swap(candidates[chosenPos], candidates[valid_count - 1]);
+            std::swap(candidates[chosenPos], candidates.back());
             
             // Shrink the valid range
-            valid_count--;
+            candidates.pop_back();
         }
         
         // Final cleanup
-        state.pruneAisles(temp.mAisles);
+        state.pruneAislesToFitOrders();
     }
 }
