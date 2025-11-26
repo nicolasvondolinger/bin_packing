@@ -1,0 +1,2 @@
+set ts=4 sw=4 mouse=a nu ai si undofile
+sy on
