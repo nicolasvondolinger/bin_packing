@@ -7,11 +7,11 @@ EXECUTABLE_PATH="./main"
 # Root directory containing the input datasets (e.g., ../datasets/a/...)
 INPUT_ROOT_DIR="../datasets"
 
-# Root directory for output (must contain subdirs 'a', 'b', 'x')
+# Root directory for output
 OUTPUT_ROOT_DIR="out"
 
-# Dataset subdirectories to process
-DATASET_SUBDIRS=("x")
+# DEFININDO APENAS A PASTA 'b'
+DATASET_SUBDIRS=("b")
 # ---------------------
 
 # Check if the executable exists
@@ -21,10 +21,10 @@ if [ ! -f "$EXECUTABLE_PATH" ]; then
     exit 1
 fi
 
-echo "Starting challenge solver execution..."
+echo "Starting challenge solver execution (Specific Range: 11-15)..."
 echo "---"
 
-# Loop through each dataset subdirectory (a, b, x)
+# Loop through each dataset subdirectory (neste caso, apenas 'b')
 for SUBDIR in "${DATASET_SUBDIRS[@]}"; do
     INPUT_DIR="$INPUT_ROOT_DIR/$SUBDIR"
     OUTPUT_DIR="$OUTPUT_ROOT_DIR/$SUBDIR"
@@ -34,25 +34,31 @@ for SUBDIR in "${DATASET_SUBDIRS[@]}"; do
     
     echo "Processing directory: $SUBDIR (Input: $INPUT_DIR, Output: $OUTPUT_DIR)"
 
-    # Loop through all .txt files in the current input directory
-    # Note: Using * ensures only files are processed, not subdirectories if they existed.
-    for INPUT_FILE in "$INPUT_DIR"/*.txt; do
-        # Check if any files were found (handles the case of no .txt files in the dir)
+    # --- ALTERAÇÃO AQUI: Loop apenas de 10 a 15 ---
+    for i in {11..15}; do
+        
+        # Formata o número para 4 dígitos (ex: 10 vira 0010)
+        # Se os seus arquivos usam 3 dígitos, mude para "%03d"
+        FMT_NUM=$(printf "%04d" "$i")
+        
+        # Constrói o nome do arquivo
+        FILENAME="instance_${FMT_NUM}.txt"
+        INPUT_FILE="$INPUT_DIR/$FILENAME"
+        
+        # Verifica se o arquivo existe antes de rodar
         if [ -f "$INPUT_FILE" ]; then
-            # Extract just the filename (e.g., instance_0003.txt)
-            FILENAME=$(basename "$INPUT_FILE")
-            
             # Construct the full output path
             OUTPUT_FILE="$OUTPUT_DIR/$FILENAME"
             
             # Run the program
             echo "  -> Running $FILENAME"
-            # The '$EXECUTABLE_PATH' is run with the input and output paths as arguments
             "$EXECUTABLE_PATH" "$INPUT_FILE" "$OUTPUT_FILE"
+        else
+            echo "  -> Aviso: $FILENAME não encontrado em $INPUT_DIR"
         fi
     done
     
     echo "---"
 done
 
-echo "All executions finished."
+echo "Selected executions finished."

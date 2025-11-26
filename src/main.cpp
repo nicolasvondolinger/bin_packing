@@ -7,12 +7,25 @@
 
 #include <functional>
 #include <mutex>
+#include <fstream> // Adicionado para manipulação de arquivos
+#include <iomanip> // Adicionado para precisão do tempo
 
-int main(int argc, char *argv[]) { _
+int main(int argc, char *argv[]) {
     srand(time(NULL));
 
     int chosenHeuristic = -1;
+    // Lendo a heurística (argumento 1)
     if(1 < argc) chosenHeuristic = std::stoi(argv[1]);
+
+    // Lendo o caminho do log (argumento 2 - opcional)
+    std::string logPath = "";
+    if(2 < argc) logPath = argv[2];
+
+    // Se tiver caminho de log, limpa o arquivo antigo criando um novo vazio
+    if (!logPath.empty()) {
+        std::ofstream ofs(logPath, std::ios::out | std::ios::trunc);
+        ofs.close();
+    }
 
     std::cerr << "Reading problem" << std::endl;
     const Problem p = Problem::ReadFrom(cin);
@@ -23,42 +36,25 @@ int main(int argc, char *argv[]) { _
     std::function<void(Solution&)> heuristic;
     switch(chosenHeuristic) {
         case 0:
-            heuristic = [&p](Solution &s)
-            {
-                Heur1::construction(p, s);
-                Heur1::refinement(p, s);
-            };
+            heuristic = [&p](Solution &s) { Heur1::construction(p, s); Heur1::refinement(p, s); };
             break;
         default:
         case 1:
-            heuristic = [&p, &c](Solution &s)
-            {
-                State state(p, c, s);
-                HeurCached::construction(p, c, state);
-                HeurCached::refinement(p, c, state);
-            };
+            heuristic = [&p, &c](Solution &s) { State state(p, c, s); HeurCached::construction(p, c, state); HeurCached::refinement(p, c, state); };
             break;
         case 2:
-            heuristic = [&p, &c](Solution &s)
-            {
-                State state(p, c, s);
-                Heur3::construction(p, c, state);
-                HeurCached::refinement(p, c, state);
-            };
+            heuristic = [&p, &c](Solution &s) { State state(p, c, s); Heur3::construction(p, c, state); HeurCached::refinement(p, c, state); };
             break;
         case 3:
-            heuristic = [&p, &c](Solution &s)
-            {
-                State state(p, c, s);
-                Heur4::construction(p, c, state);
-                HeurCached::refinement(p, c, state);
-            };
+            heuristic = [&p, &c](Solution &s) { State state(p, c, s); Heur4::construction(p, c, state); HeurCached::refinement(p, c, state); };
             break;
     }
 
     size_t threadCount = std::thread::hardware_concurrency();
     
-    auto lastImprovement = chrono::high_resolution_clock::now();
+    // Marca o tempo de início total
+    auto startTime = chrono::high_resolution_clock::now(); 
+    auto lastImprovement = startTime;
     auto patience = chrono::seconds(3);
 
     std::cerr << "Running threads" << std::endl;
@@ -79,21 +75,31 @@ int main(int argc, char *argv[]) { _
                 bool feasible = solution.checkFeasibility(p);
 
                 if(!feasible) {
-                    std::cerr << "Produced unfeasible solution! "
-                        << solution.mOrders.size() << " orders, "
-                        << solution.mAisles.size() << " aisles, "
-                        << solution.getTotalUnits(p) << " units" << std::endl;
                     continue;
                 }
                 
                 solutionMutex.lock();
                 now = chrono::high_resolution_clock::now();
                 if (score > bestScore) {
-                    std::cerr << "New best! " << score << ' '
-                        << (feasible ? "Feasible" : "Unfeasible") << std::endl;
+                    std::cerr << "New best! " << score << ' ' << (feasible ? "Feasible" : "Unfeasible") << std::endl;
+                    
                     bestScore = score;
                     bestSolution = solution;
                     lastImprovement = now;
+
+                    // --- TRECHO ADICIONADO: LOG PARA GRÁFICO ---
+                    if (!logPath.empty()) {
+                        // Calcula tempo decorrido desde o início em segundos
+                        chrono::duration<double> elapsed = now - startTime;
+                        
+                        // Abre em modo append (adicionar ao final)
+                        std::ofstream logFile(logPath, std::ios::app);
+                        if (logFile.is_open()) {
+                            logFile << std::fixed << std::setprecision(6) << elapsed.count() << " " << score << "\n";
+                            logFile.close();
+                        }
+                    }
+                    // ------------------------------------------
                 }
                 solutionMutex.unlock();
             }
