@@ -93,13 +93,23 @@
 
 #pragma once
 
-#include <bits/stdc++.h>
+#include <vector>
+#include <string>
+#include <algorithm>
+#include <numeric>
+#include <unordered_map>
+#include <map>
+#include <unordered_set>
+#include <set>
+#include <chrono>
+#include <iostream>
+#include <random>
+#include <thread>
 
 using namespace std;
 
 #define _ ios_base::sync_with_stdio(0); cin.tie(0);
 #define all(a) (a).begin(), (a).end()
-#define endl '\n'
 #define ff first
 #define ss second
 #define pb push_back
@@ -109,24 +119,129 @@ typedef long long ll;
 const int INF = 0x3f3f3f3f;
 const ll LINF = 0x3f3f3f3f3f3f3f3fll;
 
-// Número de pedidos, itens, corredores.
-ll o, i, a, lb, ub;
+struct Problem {
+    // A vector of (item, quantity) pairs for each order / aisle.
+    vector<vector<pair<int, int>>> orders, aisles;
+    ll itemCount, lb, ub;
 
-vector<vector<pair<int, int>>> orders, aisles;
+    Problem() {}
 
-class Solution {
-    public:
-        vector<int> mOrders, mAisles;
+    void readFrom(std::istream &input) {
+        ll orderCount, aisleCount;
+        input >> orderCount >> itemCount >> aisleCount;
 
-        void print(){
-            cout << mAisles.size() << endl;
-            for(size_t j = 0; j < mAisles.size(); j++){
-                cout << mAisles[j] << endl;
-            }
+        orders.resize(orderCount);
+        aisles.resize(aisleCount);
 
-            cout << mOrders.size() << endl;
-            for(size_t j = 0; j < mOrders.size(); j++){
-                cout << mOrders[j] << endl;
+        for(int j = 0; j < orderCount; j++){
+            int k; input >> k;
+            for(int l = 0; l < k; l++){
+                int iten, quant; input >> iten >> quant;
+                orders[j].pb({iten, quant});
             }
         }
+
+        for(int j = 0; j < aisleCount; j++){
+            int l; input >> l;
+            for(int t = 0; t < l; t++){
+                int iten, quant; input >> iten >> quant;
+                aisles[j].pb({iten, quant});
+            }
+        }
+
+        for(auto &aisle: aisles)
+            std::sort(aisle.begin(), aisle.end(), [](auto &a, auto &b) { return a.ss > b.ss; });
+
+        for(auto &order: orders)
+            std::sort(order.begin(), order.end(), [](auto &a, auto &b) { return a.ss > b.ss; });
+
+        input >> lb >> ub;
+    }
+
+    static Problem ReadFrom(std::istream &input) {
+        Problem p;
+        p.readFrom(input);
+        return p;
+    }
+};
+
+struct Solution {
+    std::unordered_set<int> mOrders, mAisles;
+
+    void print(){
+        cout << mOrders.size() << endl;
+        for(int o: mOrders)
+            cout << o << endl;
+
+        cout << mAisles.size() << endl;
+        for(int a: mAisles)
+            cout << a << endl;
+    }
+    
+    int getTotalUnits(const Problem &p) const {
+        int totalUnits = 0;
+        for (int orderIdx : mOrders) {
+            for (const auto& item_quant : p.orders[orderIdx]) {
+                totalUnits += item_quant.ss;
+            }
+        }
+        return totalUnits;
+    }
+    
+    double calculateScore(const Problem &p) const {
+        int totalUnits = getTotalUnits(p);
+        if (mAisles.empty()) return 0.0;
+        return (double)totalUnits / mAisles.size();
+    }
+
+    double calculateScoreLog(const Problem &p) const {
+        int totalUnits = getTotalUnits(p);
+        if (mAisles.empty()) return 1.0;
+        return log(totalUnits) - log(mAisles.size());
+    }
+
+    bool checkFeasibility(const Problem &p) const {
+        std::unordered_set<int> seen;
+        for (int orderIdx : mOrders) {
+            if (orderIdx < 0 || orderIdx >= p.orders.size()) return false;
+            if (seen.insert(orderIdx).second == false) return false;
+        }
+        seen.clear();
+
+        for (int aisleIdx : mAisles) {
+            if (aisleIdx < 0 || aisleIdx >= p.aisles.size()) return false;
+            if (seen.insert(aisleIdx).second == false) return false;
+        }
+
+
+        // Check wave size bounds
+        ll total_units_picked = getTotalUnits(p);
+        if (!(p.lb <= total_units_picked && total_units_picked <= p.ub)) {
+            return false;
+        }
+
+        // Compute total required quantity for each item
+        // required_quantities: item_id -> total_required_quantity
+        std::vector<size_t> required(p.itemCount, 0), available(p.itemCount, 0);
+        for (int orderIdx : mOrders) {
+            for (const auto& item_quant : p.orders[orderIdx]) {
+                required[item_quant.ff] += item_quant.ss;
+            }
+        }
+
+        // Compute total available quantity for each item in visited aisles
+        // available_quantities: item_id -> total_available_quantity
+        for (int aisleIdx : mAisles) {
+            for (const auto& item_quant : p.aisles[aisleIdx]) {
+                available[item_quant.ff] += item_quant.ss;
+            }
+        }
+
+        // Check if all required items are sufficiently available
+        for (int i = 0; i < p.itemCount; i += 1)
+            if (required[i] > available[i])
+                return false;
+
+        return true;
+    }
 };
